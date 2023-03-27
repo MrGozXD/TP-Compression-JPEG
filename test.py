@@ -319,7 +319,7 @@ qC = np.array([[17, 18, 24, 47, 99, 99, 99, 99],  # chrominance quantization tab
 # read an image and show it
 url = "http://www.lenna.org/len_std.jpg"
 imgOriginal = load_from_url(url)
-show(imgOriginal)
+#show(imgOriginal)
 
 img_array = np.array(imgOriginal)
 
@@ -329,6 +329,153 @@ redC=img_array[:,:,0]
 blueC=img_array[:,:,1]
 greenC=img_array[:,:,2]
 
+# For students
+# TODO: Write your 'main' code 
+# convert color image into gray image (or image in YCrCb space)
+
+# This is just an example of coding, you can make your code differently
+
+# ADVICE: create an other 'Code cell' and write/test your code gradually there 
+# since the code given here is not exectable yet 
+
+img = cv2.cvtColor(imgOriginal, cv2.COLOR_BGR2YCR_CB)
+imgGray = cv2.cvtColor(imgOriginal, cv2.COLOR_BGR2GRAY)
+# color
+# First, you can work with only gray images for simplicity
+
+
+width = len(img[0])
+height = len(img)
+
+# 
+img_gray = imgGray[:, :]
+#print(img_gray)
+#
+
+#show img_gray
+#show(img_gray)
+
+# define block size
+blockSize = 8
+
+# compute number of blocks
+numBlocksH = int(height / blockSize)
+
+# padding
+if height % blockSize != 0:
+    numBlocksH = numBlocksH + 1
+
+# luminance channel (Y)
+lumCh = img[:, :, 0]
+#show(lumCh)
+
+# Red channel (Cr)
+crCh=img[:, :, 1]
+#show(crCh)
+# Blue channel (Cb)
+cbCh=img[:, :, 2]
+#show(cbCh)
+
+
+# for color images we can work with the YCrCb space
+# chrominance channels should be sub-sampled with different sub-sampling factors
+# A very simple way: using a 2x2 averaging filter 
+# another type of filter can be used
+# then we can work with the sub-sampled version of the chrominance channels
+#--------------------
+
+# define empty matrices to store Dct
+imgDct=np.zeros((height, width), np.float32)
+
+# define empty matrices to store the quantized values
+imgQuant=np.zeros((height, width), np.float32)
+
+
+# This will be used for of ZigZag...
+col = np.array([1, 2, 1, 1, 2, 3, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5,
+                6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7, 8, 8, 7, 6, 5, 4, 3, 4, 5, 6, 7, 8, 8, 7, 6, 5, 6, 7, 8, 8, 7, 8])
+
+
+lig = np.array([1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1, 1, 2,
+                3, 4, 5, 6, 7, 8, 8, 7, 6, 5, 4, 3, 2, 3, 4, 5, 6, 7, 8, 8, 7, 6, 5, 4, 5, 6, 7, 8, 8, 7, 6, 7, 8, 8])
+
+
+ZZ_Blk = np.zeros(blockSize * blockSize) #1D
+
+
+vRLC = [] #1D
+
+size_vRLC = 0
+
+def centrage128(matrice : np.ndarray):
+
+    longueur, largeur = matrice.shape
+    for i in range (0,longueur):
+        for j in range (0,largeur):
+            matrice [i,j] = matrice[i,j]-128
+
+    return matrice
+
+lumChCentered=centrage128(lumCh)
+
+#pseudo-code
+for i in range(numBlocksH): #of course, this needs to be computed
+    for j in range(numBlocksH):
+        # get the block
+        block=lumChCentered[i*blockSize:(i+1)*blockSize, j*blockSize:(j+1)*blockSize]
+        
+        #print(block)
+        #print(block.shape)
+        #show(block)
+        # DCT
+        #imgDct = cv2.dct(block.astype(np.float32))
+        imgDct[i*blockSize:(i+1)*blockSize, j*blockSize:(j+1)*blockSize]=cv2.dct(block.astype(np.float32))
+    
+        #imgDct[i,j]=cv2.dct(block.astype(np.float32))
+        
+        
+        # Quantization
+        #imgQuant[i,j]= np.round(imgDct / qY)
+        #imgQuant=np.append(imgQuant,np.round((imgDct) / (qY[i*blockSize:(i+1)*blockSize, j*blockSize:(j+1)*blockSize])))
+        imgQuant[i*blockSize:(i+1)*blockSize, j*blockSize:(j+1)*blockSize]=np.round(imgDct[i*blockSize:(i+1)*blockSize, j*blockSize:(j+1)*blockSize] / qY)
+        # easy ZigZag Version 2: 
+        # use the `col` and `lig` vectors
+        # and the `ZZ_Blk` vector
+        ZZ_Blk = zigzag(imgQuant[i*blockSize:(i+1)*blockSize, j*blockSize:(j+1)*blockSize][col-1, lig-1])
+        # zigzag (1D)
+        
+        
+        
+        
+
+        
+        
+        # run length coding (1D)
+        # can use `extend` function of numpy vRLC.extend()
+        vRLC+=rlencode(ZZ_Blk).tolist()
+
+print("imgDct :")
+print(imgDct)
+print(len(imgDct))
+#for i in imgDct:
+    #print(i)
+print("imgQuant :")
+print(imgQuant)
+print(len(imgQuant))
+
+
+#end for
+
+
+# Huffman
+mat_table: dict = construct_huffman_table(ZZ_Blk)
+mat_encoded: str = encode_huffman(ZZ_Blk, mat_table)
+mat_decoded: np.ndarray = decode_huffman(mat_encoded, mat_table)
+
+#print(ZZ_Blk)
+#print(mat_table)
+#print(mat_encoded)
+#print(mat_decoded)
 
 
 
